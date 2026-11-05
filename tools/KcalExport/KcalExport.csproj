@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    离线导出工具：不依赖游戏进程 / MelonLoader，直接把 StreamingAssets 里全部 .ma2
+    按 mod 自己的算法（src\Ma2.cs + src\Geo.cs）算出手部里程，换算成 kcal 后写成 JSON。
+
+    这两个源文件是「链接进来」而不是复制一份：mod 改了算法，导出结果自动跟着变。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>KcalExport</AssemblyName>
+    <RootNamespace>KcalExport</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\..\src\Ma2.cs" Link="src\Ma2.cs" />
+    <Compile Include="..\..\src\Geo.cs" Link="src\Geo.cs" />
+  </ItemGroup>
+
+</Project>

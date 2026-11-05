@@ -24,14 +24,16 @@ namespace MaimaiKcal
             return string.Format("本轮累计 {0:0.0} kcal · 手部 {1:0} m", kcal, meters);
         }
 
-        /// <summary>右下角常驻 HUD：两行，本曲 / 本轮。</summary>
-        public static string Hud(double trackKcal, double trackMeters, double sessionKcal, double sessionMeters)
+        /// <summary>右下角常驻 HUD：三行，本曲 / 本轮 / 总计（本次启动以来，换轮不归零）。</summary>
+        public static string Hud(double trackKcal, double trackMeters,
+                                 double sessionKcal, double sessionMeters,
+                                 double totalKcal, double totalMeters)
         {
             if (Config.Current.Ascii)
-                return string.Format("This track {0:0.0} kcal - {1:0} m\nSession {2:0.0} kcal - {3:0} m",
-                                     trackKcal, trackMeters, sessionKcal, sessionMeters);
-            return string.Format("本曲 {0:0.0} kcal · {1:0} m\n本轮 {2:0.0} kcal · {3:0} m",
-                                 trackKcal, trackMeters, sessionKcal, sessionMeters);
+                return string.Format("This track {0:0.0} kcal - {1:0} m\nSession {2:0.0} kcal - {3:0} m\nTotal {4:0.0} kcal - {5:0} m",
+                                     trackKcal, trackMeters, sessionKcal, sessionMeters, totalKcal, totalMeters);
+            return string.Format("本曲 {0:0.0} kcal · {1:0} m\n本轮 {2:0.0} kcal · {3:0} m\n总计 {4:0.0} kcal · {5:0} m",
+                                 trackKcal, trackMeters, sessionKcal, sessionMeters, totalKcal, totalMeters);
         }
     }
 }

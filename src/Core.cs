@@ -45,7 +45,8 @@ namespace MaimaiKcal
 
         public override void OnApplicationQuit()
         {
-            Diag.Msg("游戏退出（本轮累计 " + Tracker.SessionMeters.ToString("0.0") + " m）");
+            Diag.Msg("游戏退出（本轮累计 " + Tracker.SessionMeters.ToString("0.0") + " m，启动以来总计 "
+                     + Tracker.TotalMeters.ToString("0.0") + " m / " + Energy.Kcal(Tracker.TotalMeters).ToString("0.0") + " kcal）");
         }
     }
 
@@ -121,7 +122,10 @@ namespace MaimaiKcal
         public float HudFont = 20f;
         public string HudCanvas = "";
 
-        public bool TrackSecondPlayer = false;
+        // -1 = 自动：按游戏里的玩家入场状态（1P / 2P / 1P+2P）自动判断
+        //  0 = 不统计  1 = 只 1P  2 = 只 2P  3 = 两名都算
+        public int Players = -1;
+        public int HudMonitor = -1;
 
         public bool Debug = false;
         public bool Ascii = false;
@@ -155,8 +159,9 @@ namespace MaimaiKcal
             catch (Exception e) { Diag.Error("读配置失败", e); }
 
             Current = c;
-            Diag.Msg(string.Format("enabled={0} weight={1}kg alpha={2} select={3} hud={4} debug={5}",
-                B(c.Enabled), c.WeightKg, c.Alpha, B(c.ShowSelect), B(c.ShowHud), B(c.Debug)));
+            Diag.Msg(string.Format("enabled={0} weight={1}kg alpha={2} select={3} hud={4} players={5} hudmonitor={6} debug={7}",
+                B(c.Enabled), c.WeightKg, c.Alpha, B(c.ShowSelect), B(c.ShowHud),
+                c.Players < 0 ? "auto" : c.Players.ToString(), c.HudMonitor < 0 ? "auto" : c.HudMonitor.ToString(), B(c.Debug)));
         }
 
         static void Parse(Cfg c, string k, string v)
@@ -181,7 +186,11 @@ namespace MaimaiKcal
                     case "hudy": c.HudY = (float)Double(v, c.HudY); break;
                     case "hudfont": c.HudFont = (float)Double(v, c.HudFont); break;
                     case "hudcanvas": c.HudCanvas = v; break;
-                    case "track2p": c.TrackSecondPlayer = Bool(v, false); break;
+                    // 玩家构成：auto（按入场状态自动判断）/ off / 1p / 2p / both
+                    case "players": c.Players = Mask(v, -1); break;
+                    case "hudmonitor": c.HudMonitor = Mask(v, -1); break;
+                    // 兼容旧配置：track2p=1 → 两名玩家都算；track2p=0 → auto
+                    case "track2p": c.Players = Bool(v, false) ? 3 : -1; break;
                     case "debug": c.Debug = Bool(v, false); break;
                     case "ascii": c.Ascii = Bool(v, false); break;
                 }
@@ -203,6 +212,19 @@ namespace MaimaiKcal
             double d;
             if (double.TryParse(v, System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out d)) return d;
+            return dflt;
+        }
+
+        /// <summary>玩家构成配置：auto/off/1p/2p/both（也认 0/1/2/3 与 1p2p）。</summary>
+        static int Mask(string v, int dflt)
+        {
+            if (string.IsNullOrEmpty(v)) return dflt;
+            v = v.Trim().ToLowerInvariant();
+            if (v == "auto" || v == "-1") return -1;
+            if (v == "off" || v == "none" || v == "0") return 0;
+            if (v == "1p" || v == "1") return 1;
+            if (v == "2p" || v == "2") return 2;
+            if (v == "both" || v == "all" || v == "1p2p" || v == "3") return 3;
             return dflt;
         }
 

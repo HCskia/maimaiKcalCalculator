@@ -1,7 +1,8 @@
 // Harmony 挂点：
 //   Process.MusicSelectProcess.OnUpdate   —— 每帧刷新选曲画面（同时负责「新一轮清零」）
 //   Process.GameProcess.OnStart/OnRelease —— 一曲开始/结束（真实触摸里程的边界）
-//   Monitor.ResultMonitor.Initialize      —— 结算画面出现（显示本曲 + 本轮累计）
+// 结算画面没有单独挂钩：试过 Monitor.ResultMonitor.Initialize，挂上了但画不出来，
+// 最后改成上屏常驻 HUD（见 Hud.cs）。
 using System;
 using System.Reflection;
 using HarmonyLib;

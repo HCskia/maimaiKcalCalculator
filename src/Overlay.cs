@@ -31,9 +31,14 @@ namespace MaimaiKcal
                                      Vector2 pos, float fontSize, TextAlignmentOptions align, bool topMost)
         {
             var go = new GameObject("MaimaiKcal_Overlay", typeof(RectTransform));
+            // 宿主可能不是 Canvas 本身（例如上屏的 Sub 信息栏只是一个 RectTransform），
+            // 渲染模式 / sorting 要从它最近的一级 Canvas 继承。
+            var host = parent.GetComponent<Canvas>();
+            if (host == null) host = parent.GetComponentInParent<Canvas>();
+
             // ★ 必须跟宿主同一个 Unity layer：监视器相机的 cullingMask 只认 UI 层，
             //   新建的 GameObject 默认是 Default 层，会被相机直接剔除（挂上了但什么都看不到）。
-            go.layer = parent.gameObject.layer;
+            go.layer = host != null ? host.gameObject.layer : parent.gameObject.layer;
             go.transform.SetParent(parent, false);
             go.transform.SetAsLastSibling();
 
@@ -41,7 +46,6 @@ namespace MaimaiKcal
             {
                 // 独立子 Canvas + overrideSorting：保证画在宿主 Canvas 的所有内容之上
                 var cv = go.AddComponent<Canvas>();
-                var host = parent.GetComponent<Canvas>();
                 cv.overrideSorting = true;
                 if (host != null)
                 {

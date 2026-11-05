@@ -7,3 +7,10 @@ obj/
 
 # 运行时缓存（由 mod 自己生成在游戏目录，这里只防手抖）
 *.cache
+
+# 导出产物：.\export-charts.ps1 一条命令就能重生成，而且 jackets\ 有 441 MB。
+# 想要数据的人自己跑一遍，或者把需要的东西挂到 Release 附件里。
+dataout/
+
+# python 工具的字节码（tools\export-table.py）
+__pycache__/
