@@ -16,6 +16,9 @@ namespace MaimaiKcal
             Hook(h, "Process.MusicSelectProcess", "OnUpdate", "Select_Update");
             Hook(h, "Process.GameProcess", "OnStart", "Game_Start");
             Hook(h, "Process.GameProcess", "OnRelease", "Game_Release");
+            // 一轮（续关流程）结束后的存盘窗口：把本轮收集的每曲记录追加到当日 JSON
+            Hook(h, "Process.DataSaveProcess", "OnStart", "DataSave_Start");
+            Hook(h, "Process.DataSaveProcess", "OnRelease", "DataSave_Release");
         }
 
         static void Hook(HarmonyLib.Harmony h, string typeName, string methodName, string postfixName)
@@ -62,6 +65,20 @@ namespace MaimaiKcal
         {
             try { Tracker.EndTrack(); }
             catch (Exception e) { Diag.ErrorOnce("game_release", e); }
+        }
+
+        /// <summary>续关 / 结算后的 DataSaveProcess：本轮已经打完，统一追加到当日 JSON。</summary>
+        public static void DataSave_Start()
+        {
+            try { RecordCollector.Flush("round-end"); }
+            catch (Exception e) { Diag.ErrorOnce("record_datasave_start", e); }
+        }
+
+        /// <summary>兜底：OnStart 没赶上（或写失败后重试）再 flush 一次，已写过的按 key 去重。</summary>
+        public static void DataSave_Release()
+        {
+            try { RecordCollector.Flush("round-end-release"); }
+            catch (Exception e) { Diag.ErrorOnce("record_datasave_release", e); }
         }
     }
 }

@@ -65,6 +65,7 @@ namespace MaimaiKcal
         static bool _arraysTried;
         static int _lastTrackCount = -1;
         static float _trackStart;
+        static DateTime _trackStartWall;
         static float _dbgTimer;
         static float _modeTimer;
         static long _contacts;
@@ -94,6 +95,10 @@ namespace MaimaiKcal
 
             if (newCredit)
             {
+                // 上一轮如果没等到 DataSaveProcess（例如直接退出），在这里兜底落盘
+                try { RecordCollector.Flush("new-credit"); }
+                catch (Exception e) { Diag.ErrorOnce("record-newcredit", e); }
+
                 PlayerSession[0] = PlayerSession[1] = 0.0;
                 Tracks = 0;
                 LastTrackMeters = 0.0;
@@ -104,6 +109,7 @@ namespace MaimaiKcal
             PlayerTrack[0] = PlayerTrack[1] = 0.0;
             _contacts = 0;
             _trackStart = Time.realtimeSinceStartup;
+            _trackStartWall = DateTime.Now;
             Active = true;
             for (int p = 0; p < Players; p++)
             {
@@ -125,6 +131,8 @@ namespace MaimaiKcal
             PlayerSession[0] += PlayerTrack[0];
             PlayerSession[1] += PlayerTrack[1];
             Tracks++;
+            try { RecordCollector.CaptureTrack(_trackStartWall, Tracks); }
+            catch (Exception e) { Diag.ErrorOnce("record-capture", e); }
             float dur = Time.realtimeSinceStartup - _trackStart;
             if (dur < 1f) dur = 1f;
             Diag.Msg(string.Format("本曲结束：{0:0.0} m → {1:0.0} kcal（1P {2:0.0} m / 2P {3:0.0} m，触点 {4}，用时 {5:0} s）| 本轮累计 {6:0.0} m | 启动以来总计 {7:0.0} m / {8:0.0} kcal",

@@ -285,6 +285,34 @@ mod 直接沿用这个判据：
 [MaimaiKcal] 本曲结束：229.3 m → 16.1 kcal（1P 120.4 m / 2P 108.9 m，触点 812，用时 143 s）| 本轮累计 458.6 m | 启动以来总计 688.0 m / 48.2 kcal
 ```
 
+## 每日游戏记录（给「舞萌热量」App 导入）
+
+每轮结束（续关 / 结算后的 `Process.DataSaveProcess`）把本轮每首歌追加到
+`<recorddir>\maimai-YYYY-MM-DD.json`，App 通过局域网 SMB 读这个目录。
+
+```ini
+recordenabled = 1
+# 留空 = <Package>\Mods\maimaiKcalCalculator\records
+# 相对路径按 <Package> 解析；这个目录就是 App 里填的共享目录
+recorddir = D:\maimai-records
+# auto = 按 Package 路径里的 SDGB / SDEZ 判断；也可强制 cn / jp
+recordserver = auto
+```
+
+每条记录包含：曲名、难度（0..4 + 名称）、等级文案、达成率（百分比，4 位小数）、
+游玩开始时间、**本次实际手部里程**（`Tracker` 的真实输入采样）、**谱面预计手部里程**
+（`ChartStore` 的 `.ma2` 解析）、玩家位（1P/2P，只写在场的一侧）、服务器（`cn` / `jp`）。
+两个里程都**不换算 kcal** —— App 自己按体重和 alpha 算。
+
+- 写盘是「读已有 JSON → 在 `records` 数组末尾插入 → 临时文件 + 原子替换」，
+  用 `key` 去重，重复 flush / 中途重试不会写两条。
+- 文件被手改坏时先备份成 `*.json.bad-<时间>` 再重建，不静默覆盖。
+- 轮次判定：每曲 `GameProcess.OnRelease` 只入内存；`DataSaveProcess.OnStart/OnRelease` 落盘；
+  换轮（`BeginTrack` 判定 newCredit）和游戏退出时兜底 flush。
+- `JP` 与 `CN` 两个包共用同一个 `recorddir` 时，每条记录自带 `server` 标记。
+
+宿主侧测试（不启动游戏）：`dotnet run --project tools\RecordFileTest -c Release`。
+
 ## 已知限制
 
 - `alpha` 是经验系数，别把 kcal 当医疗或训练数据用

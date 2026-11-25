@@ -106,6 +106,22 @@ static class Program
         Check("Energy.Kcal(TotalMeters)", Energy.Kcal(Tracker.TotalMeters), 1.0e-3 * 70.0 * 240.0);
         Check("Energy.Kcal(TrackMeters) is separate", Energy.Kcal(Tracker.TrackMeters), 0.0);
 
+        Step("record hooks: one CaptureTrack per ended track, one Flush per new credit");
+        RecordCollector.Reset();
+        Tracker.BeginTrack(5);                 // 和上一段同一轮（5 > 1），不该 flush
+        Check("flush on same-credit BeginTrack", RecordCollector.FlushCount, 0);
+        Tracker.PlayerTrack[0] = 50.0;
+        Tracker.EndTrack();
+        Check("CaptureTrack after the track ends", RecordCollector.CaptureCount, 1);
+        Check("captured track index = 本轮第几首 (Tracks)", RecordCollector.LastCaptureTrack, Tracker.Tracks);
+        Check("captured start time is a real timestamp",
+              RecordCollector.LastCaptureAt == default(DateTime) ? 0 : 1, 1);
+        Tracker.EndTrack();                    // 重复 OnRelease 不能再收一条
+        Check("no duplicate CaptureTrack", RecordCollector.CaptureCount, 1);
+        Tracker.BeginTrack(1);                 // 回落 = 换一轮 → 兜底 flush 上一轮
+        Check("flush on new credit", RecordCollector.FlushCount, 1);
+        Check("flush reason", RecordCollector.LastFlushReason == "new-credit" ? 1 : 0, 1);
+
         Step("HUD text");
         string hud = Strings.Hud(16.1, 229.3, 32.2, 458.6, 48.3, 688.0);
         Console.WriteLine(hud.Replace("\n", " | "));

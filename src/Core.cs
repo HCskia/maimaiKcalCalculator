@@ -21,7 +21,7 @@ namespace MaimaiKcal
 {
     public class Core : MelonMod
     {
-        public const string ModVersion = "0.1.0";
+        public const string ModVersion = "0.2.0";
         public static Core Instance;
 
         public override void OnInitializeMelon()
@@ -45,6 +45,8 @@ namespace MaimaiKcal
 
         public override void OnApplicationQuit()
         {
+            try { RecordCollector.Flush("game-quit"); }
+            catch (Exception e) { Diag.ErrorOnce("record-quit", e); }
             Diag.Msg("游戏退出（本轮累计 " + Tracker.SessionMeters.ToString("0.0") + " m，启动以来总计 "
                      + Tracker.TotalMeters.ToString("0.0") + " m / " + Energy.Kcal(Tracker.TotalMeters).ToString("0.0") + " kcal）");
         }
@@ -129,6 +131,14 @@ namespace MaimaiKcal
 
         public bool Debug = false;
         public bool Ascii = false;
+
+        // ---- 每日游戏记录（App「舞萌热量」通过 SMB 读取）
+        // recordenabled=1 时，每轮结束把本轮每首歌追加到 <recorddir>\maimai-YYYY-MM-DD.json。
+        public bool RecordEnabled = true;
+        // 留空 = <Package>\Mods\maimaiKcalCalculator\records；相对路径按 Package 目录解析。
+        public string RecordDir = "";
+        // auto = 按 Package 路径里的 SDGB / SDEZ 判断；也可强制 cn / jp。
+        public string RecordServer = "auto";
     }
 
     public static class Config
@@ -162,6 +172,15 @@ namespace MaimaiKcal
             Diag.Msg(string.Format("enabled={0} weight={1}kg alpha={2} select={3} hud={4} players={5} hudmonitor={6} debug={7}",
                 B(c.Enabled), c.WeightKg, c.Alpha, B(c.ShowSelect), B(c.ShowHud),
                 c.Players < 0 ? "auto" : c.Players.ToString(), c.HudMonitor < 0 ? "auto" : c.HudMonitor.ToString(), B(c.Debug)));
+            if (c.Enabled && c.RecordEnabled)
+            {
+                try
+                {
+                    Diag.Msg("每日记录: " + RecordCollector.ResolveRecordDir()
+                             + "（" + RecordCollector.ServerName + "）");
+                }
+                catch { }
+            }
         }
 
         static void Parse(Cfg c, string k, string v)
@@ -193,6 +212,13 @@ namespace MaimaiKcal
                     case "track2p": c.Players = Bool(v, false) ? 3 : -1; break;
                     case "debug": c.Debug = Bool(v, false); break;
                     case "ascii": c.Ascii = Bool(v, false); break;
+                    // 每日游戏记录：recordenabled / recorddir / recordserver
+                    case "recordenabled": c.RecordEnabled = Bool(v, true); break;
+                    case "record": c.RecordEnabled = Bool(v, true); break;
+                    case "recorddir": c.RecordDir = v; break;
+                    case "recordpath": c.RecordDir = v; break;
+                    case "recordserver": c.RecordServer = v; break;
+                    case "server": c.RecordServer = v; break;
                 }
             }
             catch (Exception e) { Diag.Warn("配置项解析失败 " + k + "=" + v + " : " + e.Message); }

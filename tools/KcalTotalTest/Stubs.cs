@@ -108,4 +108,41 @@ namespace MaimaiKcal
         public static void Error(string s, Exception e) { }
         public static void ErrorOnce(string key, Exception e) { }
     }
+
+    /// <summary>
+    /// Tracker 只调这两个：每曲收一条（CaptureTrack）、整轮落盘（Flush）。
+    /// 宿主侧测试不碰文件系统（真实实现要读游戏数据、写 JSON），这里只记次数和参数，
+    /// 用来断言「每曲收一次 / 换轮兜底 flush」的调用时机。
+    /// 真实实现在 src\Records.cs —— 改那边的签名要同步这里。
+    /// </summary>
+    public static class RecordCollector
+    {
+        public static int CaptureCount;
+        public static int FlushCount;
+        public static DateTime LastCaptureAt;
+        public static int LastCaptureTrack = -1;
+        public static string LastFlushReason;
+
+        public static void CaptureTrack(DateTime startedAt, int trackCount)
+        {
+            CaptureCount++;
+            LastCaptureAt = startedAt;
+            LastCaptureTrack = trackCount;
+        }
+
+        public static void Flush(string reason)
+        {
+            FlushCount++;
+            LastFlushReason = reason;
+        }
+
+        public static void Reset()
+        {
+            CaptureCount = 0;
+            FlushCount = 0;
+            LastCaptureAt = default(DateTime);
+            LastCaptureTrack = -1;
+            LastFlushReason = null;
+        }
+    }
 }
