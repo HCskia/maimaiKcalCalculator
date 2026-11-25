@@ -113,6 +113,27 @@ kcal = alpha × 体重(kg) × 手部里程(m)
 音符数（应当等于 `Ma2` 的结果）、独立数出的按钮/触摸数对谱面自带的 `T_REC_*` 表头、
 等级文案对 `musicLevelID`。本机三条分别是 7449/7449、7449/7449、7431/7447。
 
+### 按体重出热量：基准 + 换算（两个脚本）
+
+`kcal = alpha × 体重 × 里程`，体重只是最后那一次乘法。所以分两步走：基准出一次，换体重只重算乘法。
+
+```powershell
+.\export-baseline.ps1                 # 一次：全部谱面 → dataout\kcal-baseline.json（不含体重）
+.\export-weight.ps1 -Weight 65        # 每次：→ dataout\kcal\65kg.json
+.\export-weight.ps1 -Weight 82.5      # → dataout\kcal\82.5kg.json
+.\export-weight.ps1 -Weight 70 -Out D:\tmp\70kg.json
+```
+
+| 文件 | 内容 |
+|---|---|
+| `dataout\kcal-baseline.json` | 逐谱面：曲名 / 难度 / 等级 / 音符数 / 手部里程 / **`kcalPerKg`**（每公斤体重的热量 = `alpha × 里程`，不取整）。与体重无关，出一次就够；只有换 `alpha` 才需要重出（`.\export-baseline.ps1 -Alpha 1.4e-3`） |
+| `dataout\kcal\<kg>kg.json` | 逐谱面：在基准字段后追加 `kcal = kcalPerKg × 体重`（四舍五入 3 位小数）；另有 `songs[]` 曲目视图，同一首列出各难度在这个体重下的 kcal。`meta.totals` 里有合计 / 中位数 / 最大值 |
+
+换算这层不碰游戏包、不重新解析谱面（7 449 张约 0.3 秒），因为它只读基准里的 `kcalPerKg`。
+`weight = 70` 时每张谱的 `kcal` 与 `charts.json` 逐张相同（本机 7 449/7 449 对过账），
+所以拿它当 `charts.json` 的替代视图也没问题。本机 70 kg 合计 62 789 kcal、单谱中位数 6.72 kcal，
+换成 55 kg 就是 49 334 kcal。
+
 ### 七列总表（CSV / XLSX，带封面）
 
 ```powershell

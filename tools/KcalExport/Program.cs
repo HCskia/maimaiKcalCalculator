@@ -34,6 +34,9 @@ namespace KcalExport
         const string ToolName = "maimaiKcalCalculator/export-charts";
         const string ToolVersion = "1.0.0";
 
+        /// <summary>基准文件的 kind，tools\KcalWeight 靠它认文件（也靠它拒绝把产物当基准再乘一次）。</summary>
+        const string BaselineKind = "maimaiKcalCalculator/kcal-baseline";
+
         static readonly string[] DiffNames = { "BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER" };
 
         // 文件名：000008_03.ma2 / 110281_00_L.ma2（宴谱双人谱会拆成 L / R 两份）
@@ -55,7 +58,7 @@ namespace KcalExport
 
         static int Main(string[] args)
         {
-            string sa = null, outDir = null, cfg = null, server = "";
+            string sa = null, outDir = null, cfg = null, server = "", mode = "charts";
             string alphaArg = null, weightArg = null;
 
             for (int i = 0; i < args.Length; i++)
@@ -69,12 +72,20 @@ namespace KcalExport
                     case "--server": server = Next(args, ref i, a); break;
                     case "--alpha": alphaArg = Next(args, ref i, a); break;
                     case "--weight": weightArg = Next(args, ref i, a); break;
+                    case "--mode": mode = Next(args, ref i, a); break;
                     case "-h": case "--help": Usage(); return 0;
                     default:
                         Console.Error.WriteLine("未知参数: " + a);
                         Usage();
                         return 2;
                 }
+            }
+
+            bool baselineMode = string.Equals(mode, "baseline", StringComparison.OrdinalIgnoreCase);
+            if (!baselineMode && !string.Equals(mode, "charts", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine("--mode 只认 charts / baseline: " + mode);
+                return 2;
             }
 
             if (string.IsNullOrEmpty(sa)) { Console.Error.WriteLine("缺少 --sa <StreamingAssets>"); return 2; }
@@ -115,6 +126,9 @@ namespace KcalExport
             }
 
             Console.WriteLine("[KcalExport] StreamingAssets: " + streamRoot);
+            Console.WriteLine("[KcalExport] 模式: " + (baselineMode
+                ? "baseline（只写与体重无关的 kcalPerKg，weight 不参与）"
+                : "charts（写 charts.json / summary.json，weight 参与）"));
             Console.WriteLine("[KcalExport] 系数: alpha=" + F(alpha) + " kcal/(kg·m), weight=" + F(weight) + " kg");
 
             var swAll = Stopwatch.StartNew();
@@ -263,6 +277,7 @@ namespace KcalExport
                     TouchNotes = r.Stat.Touches,
                     GameNotes = gameNotes,
                     Meters = Round3(r.Stat.Meters),
+                    KcalPerKg = alpha * r.Stat.Meters,       // 与体重无关：乘以体重就是 kcal
                     Kcal = Round3(alpha * weight * r.Stat.Meters),
                     File = r.Rel,
                 });
@@ -276,6 +291,12 @@ namespace KcalExport
                 if (c != 0) return c;
                 return string.CompareOrdinal(a.Variant ?? "", b.Variant ?? "");
             });
+
+            // ---- 4.5 基准模式：只写与体重无关的 kcalPerKg（= alpha × 里程），
+            //          体重由 tools\KcalWeight 乘进来，同一份基准能出任意体重的表
+            if (baselineMode)
+                return WriteBaseline(outDir, streamRoot, server, filesScanned.Count,
+                                     alpha, alphaSrc, charts, swAll.ElapsedMilliseconds);
 
             // ---- 5. 汇总
             var meta = new
@@ -353,6 +374,110 @@ namespace KcalExport
             Console.WriteLine("[KcalExport] 写出: " + chartsPath);
             Console.WriteLine("[KcalExport] 写出: " + summaryPath);
             Console.WriteLine("[KcalExport] 总用时 " + swAll.ElapsedMilliseconds.ToString("N0") + " ms");
+            return 0;
+        }
+
+        // ------------------------------------------------------------------ 基准（与体重无关）
+
+        /// <summary>
+        /// 写 kcal-baseline.json：每张谱「每公斤体重消耗多少 kcal」= alpha × 手部里程。
+        /// 体重完全不参与，所以乘任意体重都不会和这份文件打架。
+        /// kcalPerKg 用完整双精度（不取整）：乘上体重再四舍五入到 3 位小数，
+        /// weight = 70 时与 charts.json 的 kcal 逐张相同（tools\KcalWeight 的自检就是这么比的）。
+        /// </summary>
+        static int WriteBaseline(string outDir, string streamRoot, string server, int filesScanned,
+                                 double alpha, string alphaSrc, List<ChartDto> charts, long elapsedMs)
+        {
+            var rows = new List<object>(charts.Count);
+            foreach (ChartDto c in charts)
+            {
+                rows.Add(new
+                {
+                    musicId = c.MusicId,
+                    difficulty = c.Difficulty,
+                    difficultyName = c.DifficultyName,
+                    isUtage = c.IsUtage,
+                    utageName = c.UtageName,
+                    variant = c.Variant,
+                    enabled = c.Enabled,
+                    title = c.Title,
+                    artist = c.Artist,
+                    genre = c.Genre,
+                    version = c.Version,
+                    bpm = c.Bpm,
+                    level = c.Level,
+                    levelDecimal = c.LevelDecimal,
+                    levelText = c.LevelText,
+                    designer = c.Designer,
+                    notes = c.Notes,
+                    touchNotes = c.TouchNotes,
+                    gameNotes = c.GameNotes,
+                    meters = c.Meters,
+                    kcalPerKg = c.KcalPerKg,
+                    file = c.File,
+                });
+            }
+
+            var kgs = charts.Select(c => c.KcalPerKg).OrderBy(x => x).ToList();
+
+            var meta = new
+            {
+                kind = BaselineKind,
+                schemaVersion = 1,
+                generatedAt = DateTimeOffset.Now.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture),
+                tool = ToolName + " v" + ToolVersion + " (baseline)",
+                source = new
+                {
+                    streamingAssets = streamRoot,
+                    server = string.IsNullOrEmpty(server) ? null : server,
+                    ma2FilesScanned = filesScanned,
+                },
+                model = new
+                {
+                    formula = "kcal = kcalPerKg × weightKg；kcalPerKg = alpha × meters",
+                    kcalPerKg = "每公斤体重的热量（kcal/kg），已经把 alpha 折进去了；乘上体重就是这张谱的预计消耗",
+                    alpha = alpha,
+                    alphaSource = alphaSrc,
+                },
+                counts = new
+                {
+                    charts = charts.Count,
+                    songs = charts.Select(c => c.MusicId).Distinct().Count(),
+                    songsExcludingUtage = charts.Where(c => !c.IsUtage).Select(c => c.MusicId).Distinct().Count(),
+                    utageCharts = charts.Count(c => c.IsUtage),
+                },
+                fields = new
+                {
+                    kcalPerKg = "alpha × meters，保留完整双精度（不取整），乘完体重再四舍五入到 3 位小数",
+                    meters = "手部里程（米），与 mod 选曲画面「预计」同一份算法（src/Ma2.cs）",
+                    notes = "解析到的音符事件数：TAP/HLD/BRK/EXTAP/BRTAP/BXTAP/XTP/XHO + 滑条体 + 触摸（一条滑条算 1 次，起手不重复算）",
+                    touchNotes = "触摸音符数（TTP + THO）",
+                    gameNotes = "游戏口径的音符数（Music.xml 的 maxNotes）。新格式谱面游戏内部按判定单元计数，和 notes 不等是正常的",
+                    enabled = "Music.xml 的 isEnable。false = 游戏里不会出现的占位条目",
+                    level = "Music.xml 的 level + levelDecimal（定数小数）",
+                    levelText = "游戏卡面上显示的等级，按 musicLevelID 反推（1..6 无 +，7 起 7/7+/8/8+…）",
+                },
+                next = "按体重出 kcal：.\\export-weight.ps1 -Weight 65  →  dataout\\kcal\\65kg.json" +
+                       "（也可以直接跑 dotnet run --project tools\\KcalWeight -- --baseline <基准> --weight 65）",
+                caveat = "alpha 是未标定的经验系数（默认 1.0e-3），里程可信但 kcal 绝对误差约 ±30–50%；" +
+                         "换 alpha 要重新出基准（export-baseline.ps1 -Alpha …），别在乘体重那一层改。",
+            };
+
+            Directory.CreateDirectory(outDir);
+            string path = Path.Combine(outDir, "kcal-baseline.json");
+            File.WriteAllText(path,
+                JsonSerializer.Serialize(new { meta = meta, charts = rows }, JsonOpts) + Environment.NewLine,
+                Utf8NoBom);
+
+            Console.WriteLine();
+            Console.WriteLine("[KcalExport] 基准 " + charts.Count.ToString("N0") + " 张谱 / " +
+                              meta.counts.songs.ToString("N0") + " 首（不含体重，只有 kcalPerKg）");
+            Console.WriteLine("[KcalExport] kcalPerKg：中位数 " + F(Pct(kgs, 0.50)) + "，最大 " +
+                              F(kgs.Count > 0 ? kgs[kgs.Count - 1] : 0) + " kcal/kg（= 70 kg 时中位数 " +
+                              F(Math.Round(Pct(kgs, 0.50) * 70, 3)) + " kcal、最大 " +
+                              F(Math.Round((kgs.Count > 0 ? kgs[kgs.Count - 1] : 0) * 70, 3)) + " kcal）");
+            Console.WriteLine("[KcalExport] 写出: " + path);
+            Console.WriteLine("[KcalExport] 总用时 " + elapsedMs.ToString("N0") + " ms");
             return 0;
         }
 
@@ -476,6 +601,15 @@ namespace KcalExport
             public int TouchNotes { get; set; }
             public int? GameNotes { get; set; }
             public double Meters { get; set; }
+
+            /// <summary>
+            /// 每公斤体重的热量（kcal/kg）= alpha × 未取整的里程。
+            /// 只用在「基准」导出里；charts.json 不写这个字段（JsonIgnore），
+            /// 这样同一个 DTO 能出两种文件，而且 charts.json 的格式不变。
+            /// </summary>
+            [JsonIgnore]
+            public double KcalPerKg { get; set; }
+
             public double Kcal { get; set; }
             public string File { get; set; }
         }
@@ -1116,8 +1250,9 @@ namespace KcalExport
             Console.WriteLine("  --out    <dir>    输出目录（写 charts.json + summary.json）");
             Console.WriteLine("  --cfg    <file>   maimaiKcalCalculator.cfg（读 alpha / weight，缺省用 1.0e-3 / 70）");
             Console.WriteLine("  --alpha  <num>    覆盖 alpha");
-            Console.WriteLine("  --weight <num>    覆盖体重 kg");
+            Console.WriteLine("  --weight <num>    覆盖体重 kg（只影响 charts 模式；baseline 模式不写体重）");
             Console.WriteLine("  --server <name>   仅写进 meta（sdez / sdgb）");
+            Console.WriteLine("  --mode   <name>   charts（默认，写 charts.json + summary.json）| baseline（写 kcal-baseline.json）");
         }
     }
 }
